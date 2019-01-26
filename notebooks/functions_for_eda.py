@@ -7,6 +7,10 @@ import numpy as np
 # For geojson
 import json
 
+# Determining if a point is in a polygon referenced from: https://stackoverflow.com/a/43897516/6169225
+from shapely.geometry import Point
+from shapely.geometry.polygon import Polygon
+
 def create_memory_efficient_pkl():
     """ Function that loads raw .csv data and applies memory efficient transoformations to the data. """
 
@@ -59,4 +63,30 @@ def create_slices_of_memory_efficient_pkl():
         print('{} rows processed and saved to slice.')
     print('Done.')
 
-# def load_geojson_neighborhood_data():
+def load_geojson_neighborhood_data():
+    """ Returns a DataFrame with neighborhood names and polygons. """
+
+    with open('../data/raw/chicago_zip_code_and_neighborhood_map.geojson') as f:
+        n_geo = json.load(f)
+
+    data_for_neighborhood_poly_df = []
+    # We loop through the data, and only when we have a neighborhood name do we append
+    # the to array that we use to create our neighborhood df.
+    for feature in n_geo['features']:
+        if 'pri_neigh' in feature['properties'].keys():
+            data_for_neighborhood_poly_df.append({
+                'neighborhood' : feature['properties']['pri_neigh'],
+                'polygon' : feature['geometry']['coordinates'][0][0]
+            })
+    return pd.DataFrame(data_for_neighborhood_poly_df)
+
+def get_neighborhood_containing_point(longitude, latitude, chicago_neighborhood_polygons):
+    """ Returns the name of the neighborhood that a given lat long belongs to. """
+
+    for neighborhood_name in chicago_neighborhood_polygons['neighborhood'].unique():
+        polygon = Polygon(list(chicago_neighborhood_polygons[chicago_neighborhood_polygons['neighborhood'] == neighborhood_name]['polygon'].values[0])) # create polygon
+        point = Point(longitude, latitude) # create point
+        if point.within(polygon): # check if a point is in the polygon
+            return neighborhood_name
+
+    return 'No Neighborhood'
