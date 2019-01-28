@@ -11,6 +11,37 @@ import json
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
 
+# Maps
+import folium
+
+def load_geojson_neighborhood_data():
+    """ Returns a DataFrame with neighborhood names and polygons. """
+
+    with open('../data/raw/chicago_zip_code_and_neighborhood_map.geojson') as f:
+        n_geo = json.load(f)
+
+    data_for_neighborhood_poly_df = []
+    # We loop through the data, and only when we have a neighborhood name do we append
+    # the to array that we use to create our neighborhood df.
+    for feature in n_geo['features']:
+        if 'pri_neigh' in feature['properties'].keys():
+            data_for_neighborhood_poly_df.append({
+                'neighborhood' : feature['properties']['pri_neigh'],
+                'polygon' : feature['geometry']['coordinates'][0][0]
+            })
+    return pd.DataFrame(data_for_neighborhood_poly_df)
+
+def get_neighborhood_containing_point(longitude, latitude, chicago_neighborhood_polygons):
+    """ Returns the name of the neighborhood that a given lat long belongs to. """
+
+    for neighborhood_name in chicago_neighborhood_polygons['neighborhood'].unique():
+        polygon = Polygon(list(chicago_neighborhood_polygons[chicago_neighborhood_polygons['neighborhood'] == neighborhood_name]['polygon'].values[0])) # create polygon
+        point = Point(longitude, latitude) # create point
+        if point.within(polygon): # check if a point is in the polygon
+            return neighborhood_name
+
+    return 'No Neighborhood'
+
 def create_memory_efficient_pkl():
     """ Function that loads raw .csv data and applies memory efficient transoformations to the data. """
 
@@ -43,6 +74,35 @@ def create_memory_efficient_pkl():
     # int8 -128 to 127
     df.temperature = df.temperature.astype('int8')
 
+    print('Creating stations DataFrame.')
+    n_hood = load_geojson_neighborhood_data()
+    # Create a DataFrame of unique stations, and their point (point == (latitude, longitude)),
+    # assuming stations always contain the same lat & long.
+    stations = []
+    for station in df.from_station_name.unique():
+        stations.append({
+            'station' : station,
+            'lat' : df[df.from_station_name == station].head(1)['latitude_start'].values[0],
+            'long' : df[df.from_station_name == station].head(1)['longitude_start'].values[0]
+        })
+    stations = pd.DataFrame(stations)
+    stations['neighborhood'] = stations[['long', 'lat']].apply(lambda x : get_neighborhood_containing_point(x[0], x[1], n_hood), axis = 1)
+
+    print('Adding neighborhoods to the data.')
+    df['from_neighborhood'] = df['from_station_name'].apply(lambda x : stations[stations.station == x].values[0][3])
+    df['to_neighborhood'] = df['to_station_name'].apply(lambda x : stations[stations.station == x].values[0][3])
+
+    print('Saving stations to .pkl.')
+    stations.to_pickle('../data/processed/stations.pkl')
+
+    print('Adding same_station_trip feature.')
+    # Create a column that tracks whether a trip ended at the station it started at.
+    df['same_station_trip'] = df['from_station_name'] == df['to_station_name']
+
+    print('Adding same_neighborhood feature.')
+    # Create a column that tracks whether a trip ended at the station it started at.
+    df['same_neighborhood_trip'] = df['from_neighborhood'] == df['to_neighborhood']
+
     print('Saving to .pkl.')
     df.to_pickle('../data/raw/divvy_data_small_memory.pkl')
     print('Done.')
@@ -60,33 +120,22 @@ def create_slices_of_memory_efficient_pkl():
         else:
             df[i:i+1000000].to_pickle('../data/interim/df_{}_{}.pkl'.format(i, i+1000000))
         i+=1000000
-        print('{} rows processed and saved to slice.')
+        print('{} rows processed and saved to slice.'.format(i))
     print('Done.')
 
-def load_geojson_neighborhood_data():
-    """ Returns a DataFrame with neighborhood names and polygons. """
+def add_neighborhood_overlay_to_map(m, n, c, n_hood):
+    """ Add a folium polyline to a folium map obj. """
 
-    with open('../data/raw/chicago_zip_code_and_neighborhood_map.geojson') as f:
-        n_geo = json.load(f)
+    folium.PolyLine([[x[1], x[0]] for x in list(n_hood[n_hood.neighborhood == n].values[0][1])], color=c).add_to(m)
 
-    data_for_neighborhood_poly_df = []
-    # We loop through the data, and only when we have a neighborhood name do we append
-    # the to array that we use to create our neighborhood df.
-    for feature in n_geo['features']:
-        if 'pri_neigh' in feature['properties'].keys():
-            data_for_neighborhood_poly_df.append({
-                'neighborhood' : feature['properties']['pri_neigh'],
-                'polygon' : feature['geometry']['coordinates'][0][0]
-            })
-    return pd.DataFrame(data_for_neighborhood_poly_df)
+def add_points_to_map(m, color, icon, points):
+    """ Adds divvy stations to map m. """
 
-def get_neighborhood_containing_point(longitude, latitude, chicago_neighborhood_polygons):
-    """ Returns the name of the neighborhood that a given lat long belongs to. """
+    # Plot the stations
+    for tup in points.itertuples():
+        folium.Marker([tup[1], tup[2]], popup=tup[3], icon=folium.Icon(color=color, icon=icon, prefix='fa')).add_to(m)
 
-    for neighborhood_name in chicago_neighborhood_polygons['neighborhood'].unique():
-        polygon = Polygon(list(chicago_neighborhood_polygons[chicago_neighborhood_polygons['neighborhood'] == neighborhood_name]['polygon'].values[0])) # create polygon
-        point = Point(longitude, latitude) # create point
-        if point.within(polygon): # check if a point is in the polygon
-            return neighborhood_name
+def create_chicago_map():
+    """ Returns a LeafletJS map of Chicago. """
 
-    return 'No Neighborhood'
+    return folium.Map([41.8781, -87.6298], zoom_start=11, tiles="CartoDB dark_matter")
