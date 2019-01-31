@@ -1,5 +1,6 @@
 appnope==0.1.0
 backcall==0.1.0
+binarytree==4.0.0
 branca==0.3.1
 certifi==2018.11.29
 chardet==3.0.4
@@ -35,6 +36,7 @@ requests==2.21.0
 ruamel.yaml==0.15.87
 scipy==1.2.0
 seaborn==0.9.0
+Shapely==1.6.4.post2
 six==1.12.0
 tornado==5.1.1
 traitlets==4.3.2
