@@ -128,6 +128,18 @@ def add_neighborhood_overlay_to_map(m, n, c, n_hood):
 
     folium.PolyLine([[x[1], x[0]] for x in list(n_hood[n_hood.neighborhood == n].values[0][1])], color=c).add_to(m)
 
+def add_neighborhood_overlay_to_map_with_fill(m, n, c, n_hood, fill_weight):
+    """ Add a folium polyline to a folium map obj. """
+
+    folium.PolyLine([[x[1], x[0]] for x in list(n_hood[n_hood.neighborhood == n].values[0][1])], color=c, fill_color=c, fill_opacity=fill_weight).add_to(m)
+
+def plot_polylines(m, neighborhood, travel_lines, c, n_hood):
+    """ Adds a single neighborhood to a map, alone with routes specified by code calling this method. """
+
+    folium.PolyLine([[x[1], x[0]] for x in list(n_hood[n_hood.neighborhood == neighborhood].values[0][1])], color=c).add_to(m)
+
+    folium.PolyLine(travel_lines, color=c).add_to(m)
+
 def add_points_to_map(m, color, icon, points):
     """ Adds divvy stations to map m. """
 
