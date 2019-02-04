@@ -7,12 +7,17 @@ import numpy as np
 # For geojson
 import json
 
+# Image libs
+from PIL import Image, ImageChops
+from folium.raster_layers import ImageOverlay
+
 # Determining if a point is in a polygon referenced from: https://stackoverflow.com/a/43897516/6169225
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
 
 # Maps
 import folium
+from folium import plugins
 
 def load_geojson_neighborhood_data():
     """ Returns a DataFrame with neighborhood names and polygons. """
@@ -151,3 +156,28 @@ def create_chicago_map():
     """ Returns a LeafletJS map of Chicago. """
 
     return folium.Map([41.8781, -87.6298], zoom_start=11, tiles="CartoDB dark_matter")
+
+# This is someone else's code, I will try to re-research where I found this.
+def trim(img):
+    """ Trims an image such that it can be an overlay on a folium map. """
+
+    border = Image.new(img.mode, img.size, img.getpixel((0, 0)))
+    diff = ImageChops.difference(img, border)
+    diff = ImageChops.add(diff, diff, 2.0, -100)
+    bbox = diff.getbbox()
+    if bbox:
+        img = img.crop(bbox)
+    return np.array(img)
+
+def add_image_to_map(m, path, lat_1, long_1, lat_2, long_2):
+    """ Adds an image overlay to the requisite map. """
+
+    with Image.open(path) as img:
+        image = trim(img)
+
+    # We add our legend as an image.
+    ImageOverlay(
+        image=image,
+        bounds=[[lat_1, long_1], [lat_2, long_2]],
+        zindex=1,
+    ).add_to(m)
